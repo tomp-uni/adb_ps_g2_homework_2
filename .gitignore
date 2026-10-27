@@ -1,0 +1,7 @@
+# IntelliJ project files (local setup, may contain credentials)
+.idea/
+*.iml
+out/
+
+# local DB credentials - not part of the submission
+src/ConnectionFactory.java
