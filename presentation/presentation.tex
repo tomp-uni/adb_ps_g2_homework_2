@@ -1,0 +1,87 @@
+\documentclass[aspectratio=169]{beamer}
+
+\usepackage[american]{babel}
+\usepackage{xcolor}
+\usepackage[labelformat=empty]{caption}
+\usepackage{tikz}
+\usepackage{pgfpages}
+
+%\setbeameroption{show notes}
+%\setbeameroption{show notes on second screen=right}
+
+\setbeamertemplate{caption}[numbered]
+\setbeamertemplate{navigation symbols}{}
+
+\author{
+    Aamir Ansari \and Thomas Pfister \and Maximilian Moderegger
+}
+
+\title[Homework 2]{Homework 2 - Deadlock Monitoring}
+
+% \date{07.01.26}
+% set our global settings here
+
+\usetheme{Madrid}
+
+\definecolor{maincolor}{RGB}{60, 130, 75}
+\definecolor{lightred}{rgb}{1,0.8,0.8}
+\definecolor{lightgreen}{rgb}{0.8,1,0.8}
+\setbeamercolor{structure}{fg=maincolor}
+\setbeamercolor{title}{bg=maincolor}
+\setbeamercolor{frametitle}{bg=maincolor}
+
+\begin{document}
+\maketitle
+
+%NOTE: Presentation Timelimit: 8min
+\begin{frame}[fragile]{Task Distribution}
+\begin{itemize}
+  \item Brifly discussed the team strategy
+  \item Strategy: First come, first serve.
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{What went well, what not?}
+Good:
+  \begin{itemize}
+    \item Finding documentation was easy
+    \item Amount of coding was reasonable
+  \end{itemize}
+Bad:
+\begin{itemize}
+  \item Nothing
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Something new to anybody?}
+\end{frame}
+
+\begin{frame}{Concept: Restarting Aborted Transactions}
+  Up to Task 3 for now:
+\begin{itemize}
+  \item Wrap transaction execution in a retry loop.
+  \item Detect deadlocks using PostgreSQL SQLSTATE \texttt{40P01}.
+  \item On a deadlock:
+    \begin{itemize}
+      \item Roll back the transaction.
+      \item Restart all queries from the beginning.
+    \end{itemize}
+  \item Exit the loop after a successful commit;
+        stop the task on other SQL errors.
+  \item Count retries and report them alongside completed tasks.
+\end{itemize}
+\end{frame}
+
+\begin{frame}[fragile]{Demo}
+\vbox{2cm}
+\centering
+DEMO
+\end{frame}
+
+\begin{frame}[fragile]{Conclusion}
+\begin{itemize}
+  \item Time Management: 3h + 3h + 3h %TODO: add actual time spent
+\end{itemize}
+\end{frame}
+
+\end{document}
