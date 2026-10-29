@@ -182,7 +182,7 @@ public class RestartBlocking {
 				}
 			}
 			try {
-				 ;//always close, also after giving up
+				con.close();//always close, also after giving up
 			} catch (SQLException e) {
 				e.printStackTrace();
 			}
