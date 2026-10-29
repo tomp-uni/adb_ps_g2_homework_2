@@ -103,6 +103,34 @@ public class Blocking {
         }
     }
 
+    void printWaitingLocks(Connection monitor) throws SQLException {
+        // https://wiki.postgresql.org/wiki/Lock_Monitoring
+        String sql = """
+                SELECT l.pid, l.locktype, l.mode,
+                       l.relation::regclass AS relation,
+                       l.transactionid,
+                       pg_blocking_pids(l.pid) AS blocked_by
+                FROM pg_locks l
+                JOIN pg_stat_activity AS a ON a.pid = l.pid
+                WHERE NOT l.granted
+                  AND a.datname = current_database()
+                """;
+
+        try (PreparedStatement ps = monitor.prepareStatement(sql);
+                ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                System.out.printf(
+                        "WAIT pid=%d type=%s mode=%s relation=%s tx=%s blocked_by=%s%n",
+                        rs.getInt("pid"),
+                        rs.getString("locktype"),
+                        rs.getString("mode"),
+                        rs.getString("relation"),
+                        rs.getString("transactionid"),
+                        rs.getString("blocked_by"));
+            }
+        }
+    }
+
     public static void main(String[] args) {
         // Create DB
         Blocking b = new Blocking();
@@ -124,13 +152,16 @@ public class Blocking {
         }
         executor.shutdown();
 
-        // wait for the tasks to finish
-        while (!executor.isTerminated()) {
-            try {
-                Thread.sleep(100);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
+        // Watch waiting locks on a separate connection every 500ms, while workers run.
+        try (Connection monitor = ConnectionFactory.getDefaultParameterConnection(ConnectionFactory.POSTGRESQL)) {
+            while (!executor.isTerminated()) {
+                b.printWaitingLocks(monitor);
+                Thread.sleep(500);
             }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
         stop = System.currentTimeMillis();
         System.out.println("[DONE] Task execution after roughly " + (stop - start) + " ms finished: " + b.tasks_finished
