@@ -4,4 +4,6 @@
 out/
 
 # local DB credentials - not part of the submission
-src/ConnectionFactory.java
+*ConnectionFactory.java
+target/
+information/
