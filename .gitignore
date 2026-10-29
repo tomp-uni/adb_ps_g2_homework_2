@@ -7,3 +7,11 @@ out/
 *ConnectionFactory.java
 target/
 information/
+
+# Eclipse / Maven integration files
+/.classpath
+/.project
+/.settings/
+
+# Maven Shade generated POM
+/dependency-reduced-pom.xml
