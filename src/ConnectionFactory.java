@@ -13,7 +13,7 @@ public class ConnectionFactory {
 		String url = "jdbc:postgresql://localhost:5432/postgres";
 		Properties props = new Properties();
 		props.setProperty("user", "postgres");
-		props.setProperty("password", "!@Postgres34");
+		props.setProperty("password", "CHANGE_ME");
 		try {
 			return DriverManager.getConnection(url, props);
 		} catch (SQLException e) {
