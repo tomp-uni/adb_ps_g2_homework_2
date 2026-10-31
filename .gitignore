@@ -28,3 +28,4 @@ information/
 /presentation/*.fdb_latexmk
 /presentation/*.synctex.gz
 /presentation/_minted*/
+/presentation/*.pdf
