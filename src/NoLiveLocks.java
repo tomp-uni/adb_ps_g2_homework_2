@@ -33,17 +33,19 @@ import java.util.concurrent.atomic.AtomicInteger;
 */
 
 public class NoLiveLocks {
-	public static int num_taks=100;
-	public static int num_queries_per_task = 10;
+	public static int num_taks=30;
+	public static int num_queries_per_task = 3;
 	private static final String DEADLOCK_CODE = "40P01";//PostgreSQL SQLSTATE for "deadlock detected"
-
+	private static final int MAX_ATTEMPTS_BEFORE_LOCK = 3;//after this many failed attempts a task runs alone
+	private static final int MAX_BACKOFF_MS = 100;//upper bound for the random pause before a retry
+	
 	Connection con;
 	Random rand = new Random(123456);
 	int num_tuple = 50000;
 	double max_value = 50.0f;
 	AtomicInteger tasks_finished;
 	AtomicInteger tasks_restarted;
-
+	
 	public NoLiveLocks(){
 		tasks_finished = new AtomicInteger(0);
 		tasks_restarted = new AtomicInteger(0);
@@ -146,11 +148,16 @@ public class NoLiveLocks {
 			con = ConnectionFactory.getDefaultParameterConnection(ConnectionFactory.POSTGRESQL);//XXX This is the class you need to create, but does not have to be in the Repo
 			PreparedStatement ps;
 			boolean committed = false;
-
+			int attempt = 1;
+			
 			while(!committed) {//restart the transaction until it commits
 				try {
 					con.setAutoCommit(false);
 					con.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+					if (attempt > MAX_ATTEMPTS_BEFORE_LOCK) {//starving task: wait for running transactions, block new ones, then run alone
+						System.out.println("Task "+task+" runs alone (attempt "+attempt+")");
+						executeSQL("LOCK TABLE blocking_data IN EXCLUSIVE MODE;", con);
+					}
 					int q = 0;//always restart with the first query, the rollback undid all of them
 					ps = con.prepareStatement("UPDATE blocking_data SET data_value = ?,  modified_by = "+task+" WHERE data_value >= ? AND data_value <= ?;",ResultSet.TYPE_SCROLL_SENSITIVE, ResultSet.CONCUR_UPDATABLE);
 				
@@ -165,14 +172,16 @@ public class NoLiveLocks {
 					con.commit();
 					committed = true;
 					int num_finished = tasks_finished.incrementAndGet();
-					System.out.println("Done task "+task+". I am finisher number "+num_finished);
+					System.out.println("Done task "+task+" after "+attempt+" attempt(s). I am finisher number "+num_finished);
 				} catch (SQLException e) {
 					if (DEADLOCK_CODE.equals(e.getSQLState())) {//we were chosen as deadlock victim -> roll back and try again
 						tasks_restarted.incrementAndGet();
-						System.err.println("Task "+task+" deadlock -> restart");
+						attempt++;
+						System.out.println("Task "+task+" deadlock -> restart");
 						try {
 							con.rollback();
-						} catch (SQLException ex) {
+							Thread.sleep(rand.nextInt(MAX_BACKOFF_MS));//random pause, so the victims don't restart in lockstep
+						} catch (SQLException | InterruptedException ex) {
 							throw new RuntimeException(ex);
 						}
 					} else {//any other error is a real problem -> give up
@@ -186,6 +195,6 @@ public class NoLiveLocks {
 			} catch (SQLException e) {
 				e.printStackTrace();
 			}
-		}
+		}	
 	}
 }

@@ -36,14 +36,14 @@ public class RestartBlocking {
 	public static int num_taks=30;
 	public static int num_queries_per_task = 3;
 	private static final String DEADLOCK_CODE = "40P01";//PostgreSQL SQLSTATE for "deadlock detected"
-
+	
 	Connection con;
 	Random rand = new Random(123456);
 	int num_tuple = 50000;
 	double max_value = 50.0f;
 	AtomicInteger tasks_finished;
 	AtomicInteger tasks_restarted;
-
+	
 	public RestartBlocking(){
 		tasks_finished = new AtomicInteger(0);
 		tasks_restarted = new AtomicInteger(0);
@@ -146,7 +146,8 @@ public class RestartBlocking {
 			con = ConnectionFactory.getDefaultParameterConnection(ConnectionFactory.POSTGRESQL);//XXX This is the class you need to create, but does not have to be in the Repo
 			PreparedStatement ps;
 			boolean committed = false;
-
+			int attempt = 1;
+			
 			while(!committed) {//restart the transaction until it commits
 				try {
 					con.setAutoCommit(false);
@@ -165,11 +166,12 @@ public class RestartBlocking {
 					con.commit();
 					committed = true;
 					int num_finished = tasks_finished.incrementAndGet();
-					System.out.println("Done task "+task+". I am finisher number "+num_finished);
+					System.out.println("Done task "+task+" after "+attempt+" attempt(s). I am finisher number "+num_finished);
 				} catch (SQLException e) {
 					if (DEADLOCK_CODE.equals(e.getSQLState())) {//we were chosen as deadlock victim -> roll back and try again
 						tasks_restarted.incrementAndGet();
-						System.err.println("Task "+task+" deadlock -> restart");
+						attempt++;
+						System.out.println("Task "+task+" deadlock -> restart");
 						try {
 							con.rollback();
 						} catch (SQLException ex) {
@@ -186,6 +188,6 @@ public class RestartBlocking {
 			} catch (SQLException e) {
 				e.printStackTrace();
 			}
-		}
+		}	
 	}
 }
