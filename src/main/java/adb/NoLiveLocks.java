@@ -206,7 +206,9 @@ public class NoLiveLocks {
                             throw new RuntimeException(err);
                         }
                         int retry = retries[task].incrementAndGet();
-                        long delay = Math.min(1000L, 20L * (1L << Math.min(retry, 6)));
+                        long delay = Math.min(
+                                (long) 1000,
+                                (long) (20 * Math.pow(2, Math.min(retry, 6))));
                         delay += rand.nextInt(100); // jitter prevents synchronized retries
                         if (retry > 10) {
                             System.out.println("Starvation detected for task " + task
