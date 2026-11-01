@@ -49,19 +49,20 @@ import adb.setup.ConnectionFactory;
 
 public class NoLiveLocks {
     public static int num_taks = 100;
-    public static int num_queries_per_task = 10;
-    private static final String DEADLOCK_CODE = "40P01";// PostgreSQL SQLSTATE for "deadlock detected"
+    public static int num_queries_per_task = 20;
 
     Connection con;
     Random rand = new Random(123456);
     int num_tuple = 50000;
     double max_value = 50.0f;
     AtomicInteger tasks_finished;
-    AtomicInteger tasks_restarted;
+    AtomicInteger[] retries = new AtomicInteger[num_taks];
 
     public NoLiveLocks() {
         tasks_finished = new AtomicInteger(0);
-        tasks_restarted = new AtomicInteger(0);
+        for (int i = 0; i < num_taks; i++) {
+            retries[i] = new AtomicInteger();
+        }
     }
 
     void executeSQL(String sql, Connection con) {
@@ -118,7 +119,7 @@ public class NoLiveLocks {
         }
 
         // Execute tasks
-        ThreadPoolExecutor executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(4);// XXX - Do not change the
+        ThreadPoolExecutor executor = (ThreadPoolExecutor) Executors.newFixedThreadPool(8);// XXX - Do not change the
                                                                                            // number of threads used
         double start, stop;
         start = System.currentTimeMillis();
@@ -137,7 +138,7 @@ public class NoLiveLocks {
         }
         stop = System.currentTimeMillis();
         System.out.println("[DONE] Task execution after roughly " + (stop - start) + " ms finished: " + b.tasks_finished
-                + " of " + num_taks + ", restarts: " + b.tasks_restarted);
+                + " of " + num_taks);
     }
 
     /**
@@ -162,6 +163,7 @@ public class NoLiveLocks {
 
         @Override
         public void run() {
+            boolean is_finished = false;
             Connection con = null;// XXX - Yes there needs to be a separate Connection per blocking taks.
                                   // Otherwise strange things can happen
             con = ConnectionFactory.getDefaultParameterConnection(ConnectionFactory.POSTGRESQL);// XXX This is the class
@@ -169,13 +171,12 @@ public class NoLiveLocks {
                                                                                                 // but does not have to
                                                                                                 // be in the Repo
             PreparedStatement ps;
-            boolean committed = false;
 
-            while (!committed) {// restart the transaction until it commits
+            while (!is_finished) {
                 try {
                     con.setAutoCommit(false);
                     con.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
-                    int q = 0;// always restart with the first query, the rollback undid all of them
+                    int q = 0;
                     ps = con.prepareStatement(
                             "UPDATE blocking_data SET data_value = ?,  modified_by = " + task
                                     + " WHERE data_value >= ? AND data_value <= ?;",
@@ -190,30 +191,39 @@ public class NoLiveLocks {
                         ps.execute();
                         q++;
                     }
+                    ps.close();
                     con.commit();
-                    committed = true;
                     int num_finished = tasks_finished.incrementAndGet();
+                    con.close();
                     System.out.println("Done task " + task + ". I am finisher number " + num_finished);
+                    is_finished = true;
                 } catch (SQLException e) {
-                    if (DEADLOCK_CODE.equals(e.getSQLState())) {// we were chosen as deadlock victim -> roll back and
-                                                                // try again
-                        tasks_restarted.incrementAndGet();
-                        System.err.println("Task " + task + " deadlock -> restart");
+                    if ("40P01".equals(e.getSQLState())) { // 40p01 is the postgres error code for DEADLOCK DETECTED
+                        System.out.println("Retrying task " + task);
                         try {
                             con.rollback();
-                        } catch (SQLException ex) {
-                            throw new RuntimeException(ex);
+                        } catch (SQLException err) {
+                            throw new RuntimeException(err);
                         }
-                    } else {// any other error is a real problem -> give up
+                        int retry = retries[task].incrementAndGet();
+                        long delay = Math.min(1000L, 20L * (1L << Math.min(retry, 6)));
+                        delay += rand.nextInt(100); // jitter prevents synchronized retries
+                        if (retry > 10) {
+                            System.out.println("Starvation detected for task " + task
+                                    + "; applying backoff of " + delay + " ms");
+                        }
+                        try {
+                            Thread.sleep(delay);
+                        } catch (InterruptedException interrupted) {
+                            Thread.currentThread().interrupt();
+                            return;
+                        }
+                        is_finished = false;
+                    } else {
+                        is_finished = true;
                         System.err.println("Task " + task + " " + e.getMessage());
-                        break;
                     }
                 }
-            }
-            try {
-                con.close();// always close, also after giving up
-            } catch (SQLException e) {
-                e.printStackTrace();
             }
         }
     }
