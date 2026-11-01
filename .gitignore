@@ -8,14 +8,6 @@ out/
 target/
 information/
 
-# Maven integration files
-/.classpath
-/.project
-/.settings/
-
-# Maven generated POM
-/dependency-reduced-pom.xml
-
 # Latex
 /presentation/*.aux
 /presentation/*.log
